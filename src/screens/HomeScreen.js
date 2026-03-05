@@ -5,26 +5,23 @@ import React, {
   useState,
   useContext,
 } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   ActivityIndicator,
-  Card,
-  Chip,
-  Text,
   Searchbar,
-  Badge,
-  IconButton,
   Surface,
+  Text,
 } from "react-native-paper";
-import { Heart, Search } from "lucide-react-native";
 import FavoritesContext from "../context/FavoritesContext";
-import Stars from "../components/Stars";
+import ProductCard from "../components/ProductCard";
+import FilterChip from "../components/FilterChip";
 import {
   formatPercentOff,
   getCostNumber,
   fetchHandbags,
 } from "../utils/handbag";
+import { Colors, Spacing, Typography, Radius } from "../theme";
 
 function HomeScreen({ navigation }) {
   const fav = useContext(FavoritesContext);
@@ -92,10 +89,8 @@ function HomeScreen({ navigation }) {
     return (
       <SafeAreaView style={styles.screen}>
         <View style={styles.center}>
-          <ActivityIndicator animating={true} size="large" color="#FF6B6B" />
-          <Text variant="bodyLarge" style={{ marginTop: 16 }}>
-            Loading...
-          </Text>
+          <ActivityIndicator animating size="large" color={Colors.accent} />
+          <Text style={styles.loadingText}>Loading…</Text>
         </View>
       </SafeAreaView>
     );
@@ -106,135 +101,72 @@ function HomeScreen({ navigation }) {
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <Text variant="headlineLarge" style={styles.title}>
-          Handbags Collection
-        </Text>
-        {error ? (
-          <Surface style={styles.errorBox} elevation={1}>
-            <Text variant="bodyMedium" style={styles.errorText}>
-              Error: {error}
-            </Text>
-            <Pressable style={styles.btn} onPress={load}>
-              <Text style={styles.btnText}>Retry</Text>
-            </Pressable>
-          </Surface>
-        ) : null}
+        {/* ─ Header ─────────────────────────────────────────────── */}
+        <View style={styles.headerBlock}>
+          <Text style={styles.eyebrow}>COLLECTION</Text>
+          <Text style={styles.title}>Handbags</Text>
+        </View>
+
+        {/* ─ Search ─────────────────────────────────────────────── */}
         <Searchbar
-          placeholder="Search handbags..."
+          placeholder="Search handbags…"
           onChangeText={setQ}
           value={q}
           style={styles.searchbar}
-          iconColor="#FF6B6B"
-          elevation={2}
+          inputStyle={styles.searchbarInput}
+          iconColor={Colors.accent}
+          elevation={0}
         />
 
-        <Text variant="titleMedium" style={styles.label}>
-          Filter by Category
-        </Text>
+        {/* ─ Error ──────────────────────────────────────────────── */}
+        {error ? (
+          <Surface style={styles.errorBox} elevation={0}>
+            <Text style={styles.errorText}>Error: {error}</Text>
+            <Text style={styles.retryLink} onPress={load}>
+              Tap to retry
+            </Text>
+          </Surface>
+        ) : null}
+
+        {/* ─ Filter chips ───────────────────────────────────────── */}
+        <Text style={styles.sectionLabel}>Category</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, paddingVertical: 8 }}
+          contentContainerStyle={styles.chipRow}
         >
-          {categories.map((c) => {
-            const active = c === category;
-            return (
-              <Chip
-                key={c}
-                selected={active}
-                onPress={() => setCategory(c)}
-                mode={active ? "flat" : "outlined"}
-                style={[styles.chip, active && styles.chipActive]}
-                textStyle={{ fontWeight: active ? "bold" : "normal" }}
-              >
-                {c}
-              </Chip>
-            );
-          })}
+          {categories.map((c) => (
+            <FilterChip
+              key={c}
+              label={c}
+              active={c === category}
+              onPress={() => setCategory(c)}
+            />
+          ))}
         </ScrollView>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            marginTop: 12,
-            marginBottom: 8,
-          }}
-        >
-          <Text variant="titleMedium" style={{ flex: 1 }}>
-            {filtered.length} {filtered.length === 1 ? "Item" : "Items"}
-          </Text>
-        </View>
-        <View
-          style={{
-            flexDirection: "row",
-            flexWrap: "wrap",
-            justifyContent: "space-between",
-            marginTop: 8,
-          }}
-        >
-          {filtered.map((x) => {
-            const percent = formatPercentOff(x?.percentOff);
-            const favorite = fav?.isFavorite?.(String(x?.id));
-            return (
-              <Card
-                key={x.id}
-                style={[styles.card, { width: "48%", marginBottom: 12 }]}
-                onPress={() => navigation.navigate("Detail", { item: x })}
-              >
-                <View style={styles.cardImageContainer}>
-                  <Image
-                    source={{ uri: x?.uri }}
-                    style={styles.cardImage}
-                    resizeMode="cover"
-                  />
-                  <IconButton
-                    icon={() => (
-                      <Heart
-                        size={20}
-                        color={favorite ? "#FF6B6B" : "#9CA3AF"}
-                        fill={favorite ? "#FF6B6B" : "transparent"}
-                      />
-                    )}
-                    size={20}
-                    onPress={() => {
-                      const id = String(x?.id);
-                      if (favorite) fav.removeFavorite(id);
-                      else fav.addFavorite(id);
-                    }}
-                    style={styles.favButtonTopRight}
-                    containerColor="#FFFFFF"
-                  />
-                </View>
-                <Card.Content style={styles.cardContent}>
-                  <Text
-                    variant="titleSmall"
-                    numberOfLines={2}
-                    style={styles.cardTitle}
-                  >
-                    {x?.handbagName || x?.name || "Unnamed"}
-                  </Text>
-                  <Text
-                    variant="bodySmall"
-                    style={styles.cardBrand}
-                    numberOfLines={1}
-                  >
-                    {x?.brand || "Unknown"}
-                  </Text>
-                  <View style={styles.priceRow}>
-                    <Text variant="titleMedium" style={styles.price}>
-                      ${getCostNumber(x)}
-                    </Text>
-                    {percent ? (
-                      <Badge size={20} style={styles.discountBadge}>
-                        -{percent}
-                      </Badge>
-                    ) : null}
-                  </View>
-                </Card.Content>
-              </Card>
-            );
-          })}
+
+        {/* ─ Count ──────────────────────────────────────────────── */}
+        <Text style={styles.countLabel}>
+          {filtered.length} {filtered.length === 1 ? "item" : "items"}
+        </Text>
+
+        {/* ─ Grid ───────────────────────────────────────────────── */}
+        <View style={styles.grid}>
+          {filtered.map((x) => (
+            <ProductCard
+              key={x.id}
+              item={x}
+              isFavorite={fav?.isFavorite?.(String(x?.id))}
+              onPress={() => navigation.navigate("Detail", { item: x })}
+              onFavorite={() => {
+                const id = String(x?.id);
+                if (fav?.isFavorite?.(id)) fav.removeFavorite(id);
+                else fav.addFavorite(id);
+              }}
+            />
+          ))}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -242,100 +174,103 @@ function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#F5F5F5" },
-  content: { padding: 16, paddingBottom: 40 },
+  screen: { flex: 1, backgroundColor: Colors.background },
+  content: { padding: Spacing.base, paddingBottom: 60 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+
+  // Header
+  headerBlock: {
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xl,
+  },
+  eyebrow: {
+    fontSize: Typography.fontSizeXS,
+    fontWeight: Typography.fontWeightMedium,
+    color: Colors.textSecondary,
+    letterSpacing: Typography.letterSpacingWidest,
+    marginBottom: 4,
+  },
   title: {
-    fontWeight: "bold",
-    color: "#1A1A1A",
-    marginBottom: 16,
+    fontSize: Typography.fontSizeDisplay,
+    fontWeight: Typography.fontWeightBold,
+    color: Colors.textPrimary,
+    letterSpacing: Typography.letterSpacingTight,
+    lineHeight: Typography.lineHeightDisplay,
   },
+
+  // Loading
+  loadingText: {
+    marginTop: Spacing.base,
+    fontSize: Typography.fontSizeMD,
+    color: Colors.textSecondary,
+  },
+
+  // Search
   searchbar: {
-    marginTop: 8,
-    marginBottom: 16,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    marginBottom: Spacing.xl,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.input,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  label: {
-    marginTop: 8,
-    marginBottom: 8,
-    color: "#424242",
-    fontWeight: "600",
+  searchbarInput: {
+    fontSize: Typography.fontSizeMD,
+    color: Colors.textPrimary,
   },
-  chip: {
-    backgroundColor: "#FFFFFF",
+
+  // Section label (e.g. "Category")
+  sectionLabel: {
+    fontSize: Typography.fontSizeXS,
+    fontWeight: Typography.fontWeightMedium,
+    color: Colors.textSecondary,
+    letterSpacing: Typography.letterSpacingWidest,
+    textTransform: "uppercase",
+    marginBottom: Spacing.sm,
   },
-  chipActive: {
-    backgroundColor: "#FF6B6B",
+
+  // Chip row
+  chipRow: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    marginBottom: Spacing.xl,
   },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    elevation: 2,
+
+  // Count
+  countLabel: {
+    fontSize: Typography.fontSizeSM,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.md,
+    letterSpacing: Typography.letterSpacingWide,
   },
-  cardImageContainer: {
-    position: "relative",
-    width: "100%",
-    height: 192,
-    backgroundColor: "#FAFAFA",
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-  },
-  cardImage: {
-    width: "100%",
-    height: "100%",
-  },
-  favButtonTopRight: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    margin: 0,
-    elevation: 4,
-  },
-  cardContent: {
-    paddingTop: 12,
-    paddingBottom: 8,
-    gap: 4,
-  },
-  cardTitle: {
-    fontWeight: "600",
-    color: "#1A1A1A",
-    marginBottom: 2,
-  },
-  cardBrand: {
-    color: "#757575",
-    marginBottom: 6,
-  },
-  priceRow: {
+
+  // Grid
+  grid: {
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
     justifyContent: "space-between",
-    marginTop: 4,
   },
-  price: {
-    fontWeight: "bold",
-    color: "#FF6B6B",
-  },
-  discountBadge: {
-    backgroundColor: "#D32F2F",
-  },
-  btn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#FF6B6B",
-    marginTop: 8,
-  },
-  btnText: { color: "#FFFFFF", fontWeight: "600" },
+
+  // Error
   errorBox: {
-    marginTop: 12,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: "#FFEBEE",
+    marginBottom: Spacing.base,
+    padding: Spacing.base,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.errorContainer,
+    borderWidth: 1,
+    borderColor: Colors.error,
   },
-  errorText: { color: "#C62828", fontWeight: "600" },
+  errorText: {
+    fontSize: Typography.fontSizeMD,
+    color: Colors.errorText,
+    fontWeight: Typography.fontWeightSemiBold,
+  },
+  retryLink: {
+    marginTop: Spacing.sm,
+    fontSize: Typography.fontSizeSM,
+    color: Colors.accent,
+    fontWeight: Typography.fontWeightSemiBold,
+    textDecorationLine: "underline",
+  },
 });
 
 export default HomeScreen;

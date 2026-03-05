@@ -1,20 +1,25 @@
-import React, { useMemo, useContext, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useMemo, useContext, useState, useRef } from "react";
 import {
-  Text,
-  Card,
-  Chip,
-  IconButton,
-  Divider,
-  Surface,
-  Button,
-  Badge,
-} from "react-native-paper";
-import { Heart, Home, Star } from "lucide-react-native";
+  Animated,
+  Dimensions,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Text, Chip, Divider, Surface, Card } from "react-native-paper";
+import { Heart, ChevronLeft, LayoutGrid } from "lucide-react-native";
 import FavoritesContext from "../context/FavoritesContext";
 import Stars from "../components/Stars";
+import FilterChip from "../components/FilterChip";
+import BottomCTABar from "../components/BottomCTABar";
+import QuickNavSheet from "../components/QuickNavSheet";
+import ReviewItem from "../components/ReviewItem";
+import { MOCK_REVIEWS } from "../mocks/reviews";
 import { formatPercentOff, getCostNumber } from "../utils/handbag";
+import { Colors, Spacing, Radius, Shadows, Typography } from "../theme";
 
 function DetailScreen({ route, navigation }) {
   const fav = useContext(FavoritesContext);
@@ -22,6 +27,27 @@ function DetailScreen({ route, navigation }) {
   const id = String(item?.id || "");
   const favorite = fav?.isFavorite?.(id);
   const [filterMode, setFilterMode] = useState("all");
+  const [navSheetVisible, setNavSheetVisible] = useState(false);
+
+  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const IMAGE_H = Dimensions.get("window").width * (4 / 3);
+
+  const topBarBg = scrollY.interpolate({
+    inputRange: [0, IMAGE_H * 0.55],
+    outputRange: ["rgba(254,250,224,0)", "rgba(254,250,224,1)"],
+    extrapolate: "clamp",
+  });
+  const topBarBorderOpacity = scrollY.interpolate({
+    inputRange: [IMAGE_H * 0.48, IMAGE_H * 0.65],
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
+  const titleOpacity = scrollY.interpolate({
+    inputRange: [IMAGE_H * 0.42, IMAGE_H * 0.65],
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
 
   const feedback = useMemo(() => {
     const list = Array.isArray(item?.feedback) ? item.feedback : [];
@@ -45,19 +71,53 @@ function DetailScreen({ route, navigation }) {
     };
   }, [item]);
 
-  const visibleComments = useMemo(() => {
-    if (filterMode === "all") return feedback.list;
+  // Use real feedback when available, fall back to MOCK_REVIEWS for the list
+  const displayReviews = useMemo(() => {
+    if (feedback.total > 0) {
+      return feedback.list.map((f, i) => ({
+        id: `real-${i}`,
+        userName: "Verified Customer",
+        rating: f.rating,
+        comment: f.comment,
+        createdAt: new Date().toISOString().split("T")[0],
+        verifiedPurchase: true,
+      }));
+    }
+    return MOCK_REVIEWS;
+  }, [feedback]);
+
+  // Summary stats: prefer real feedback, fall back to mock
+  const reviewStats = useMemo(() => {
+    const source = feedback.total > 0 ? feedback.list : MOCK_REVIEWS;
+    const total = source.length;
+    const avg =
+      total === 0 ? 0 : source.reduce((s, r) => s + (r.rating || 0), 0) / total;
+    const groups = new Map();
+    for (let i = 1; i <= 5; i++) groups.set(i, []);
+    source.forEach((r) => groups.get(Math.round(r.rating))?.push(r));
+    return { total, avg, groups };
+  }, [feedback]);
+
+  const visibleReviews = useMemo(() => {
+    if (filterMode === "all") return displayReviews;
     if (filterMode === "negative")
-      return feedback.list.filter((f) => f.rating <= 2);
-    if (filterMode === "1") return feedback.list.filter((f) => f.rating === 1);
-    if (filterMode === "2") return feedback.list.filter((f) => f.rating === 2);
-    return feedback.list;
-  }, [feedback.list, filterMode]);
+      return displayReviews.filter((r) => r.rating <= 2);
+    return displayReviews.filter((r) => r.rating === Number(filterMode));
+  }, [displayReviews, filterMode]);
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Product Image */}
+    <View style={styles.root}>
+      <Animated.ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false },
+        )}
+      >
+        {/* ─ Image hero ─────────────────────────────────────────── */}
         <View style={styles.imageContainer}>
           {item?.uri ? (
             <Image
@@ -67,414 +127,462 @@ function DetailScreen({ route, navigation }) {
             />
           ) : (
             <View style={styles.noImagePlaceholder}>
-              <Text variant="bodyLarge" style={styles.noImageText}>
-                No Image Available
-              </Text>
+              <Text style={styles.noImageText}>No Image</Text>
             </View>
           )}
         </View>
 
-        {/* Product Header */}
-        <Surface style={styles.headerCard} elevation={2}>
-          <View style={styles.headerTop}>
-            <View style={{ flex: 1 }}>
-              <Text variant="headlineSmall" style={styles.title}>
-                {item?.handbagName || item?.name || "Unnamed Product"}
-              </Text>
-              <Text variant="titleMedium" style={styles.brand}>
-                {item?.brand || "Unknown Brand"}
-              </Text>
-              {item?.category ? (
-                <Chip
-                  mode="outlined"
-                  style={styles.categoryChip}
-                  textStyle={styles.categoryChipText}
-                >
-                  {item.category}
-                </Chip>
-              ) : null}
-            </View>
-            <View style={styles.iconGroup}>
-              <IconButton
-                icon={() => <Home size={22} color="#757575" />}
-                size={22}
-                onPress={() => navigation.navigate("Main", { screen: "Home" })}
-                style={styles.navIconButton}
-                containerColor="#F5F5F5"
-              />
-              <IconButton
-                icon={() => <Star size={22} color="#757575" />}
-                size={22}
-                onPress={() =>
-                  navigation.navigate("Main", { screen: "Favorites" })
-                }
-                style={styles.navIconButton}
-                containerColor="#F5F5F5"
-              />
-              <IconButton
-                icon={() => (
-                  <Heart
-                    size={24}
-                    color={favorite ? "#FF6B6B" : "#9CA3AF"}
-                    fill={favorite ? "#FF6B6B" : "transparent"}
-                  />
-                )}
-                size={24}
-                onPress={() => {
-                  if (!id) return;
-                  if (favorite) fav.removeFavorite(id);
-                  else fav.addFavorite(id);
-                }}
-                style={styles.favIconButton}
-                containerColor="#FFFFFF"
-              />
-            </View>
-          </View>
+        {/* ─ Product header card ────────────────────────────────── */}
+        <View style={styles.headerCard}>
+          {/* Brand eyebrow */}
+          <Text style={styles.brandEyebrow}>
+            {(item?.brand || "Unknown Brand").toUpperCase()}
+          </Text>
 
-          {/* Price Section */}
-          <View style={styles.priceSection}>
-            <Text variant="headlineMedium" style={styles.price}>
-              ${getCostNumber(item)}
-            </Text>
-            {item?.percentOff ? (
-              <Badge size={28} style={styles.discountBadge}>
-                -{formatPercentOff(item.percentOff)} OFF
-              </Badge>
+          {/* Product name */}
+          <Text style={styles.productName}>
+            {item?.handbagName || item?.name || "Unnamed Product"}
+          </Text>
+
+          {/* Category tag + rating in one row */}
+          <View style={styles.metaRow}>
+            {item?.category ? (
+              <View style={styles.categoryTag}>
+                <Text style={styles.categoryTagText}>{item.category}</Text>
+              </View>
+            ) : null}
+            {reviewStats.total > 0 ? (
+              <View style={styles.ratingPill}>
+                <Stars value={reviewStats.avg} size={13} />
+                <Text style={styles.ratingCount}>({reviewStats.total})</Text>
+              </View>
             ) : null}
           </View>
-        </Surface>
+        </View>
 
-        {/* Product Details */}
-        <Surface style={styles.detailsCard} elevation={1}>
-          <Text variant="titleLarge" style={styles.sectionTitle}>
-            Product Details
-          </Text>
+        {/* ─ Product Details card ───────────────────────────────── */}
+        <Surface style={styles.detailsCard} elevation={0}>
+          <Text style={styles.sectionTitle}>Details</Text>
           <Divider style={styles.divider} />
 
-          <View style={styles.detailRow}>
-            <Text variant="bodyLarge" style={styles.detailLabel}>
-              Brand:
-            </Text>
-            <Text variant="bodyLarge" style={styles.detailValue}>
-              {item?.brand || "N/A"}
-            </Text>
-          </View>
-
-          {item?.category ? (
-            <View style={styles.detailRow}>
-              <Text variant="bodyLarge" style={styles.detailLabel}>
-                Category:
-              </Text>
-              <Text variant="bodyLarge" style={styles.detailValue}>
-                {item.category}
-              </Text>
-            </View>
-          ) : null}
+          {[
+            { label: "Brand", value: item?.brand || "N/A" },
+            item?.category ? { label: "Category", value: item.category } : null,
+            item?.gender !== undefined
+              ? {
+                  label: "Gender",
+                  value: item.gender === true ? "Women" : "Men",
+                }
+              : null,
+          ]
+            .filter(Boolean)
+            .map((row) => (
+              <View key={row.label} style={styles.detailRow}>
+                <Text style={styles.detailLabel}>{row.label}</Text>
+                <Text style={styles.detailValue}>{row.value}</Text>
+              </View>
+            ))}
 
           {item?.color && Array.isArray(item.color) && item.color.length > 0 ? (
             <View style={styles.detailRow}>
-              <Text variant="bodyLarge" style={styles.detailLabel}>
-                Color:
-              </Text>
-              <View style={styles.colorContainer}>
+              <Text style={styles.detailLabel}>Color</Text>
+              <View style={styles.colorRow}>
                 {item.color.map((c, idx) => (
-                  <Chip key={idx} mode="outlined" style={styles.colorChip}>
-                    {c}
-                  </Chip>
+                  <View key={idx} style={styles.colorTag}>
+                    <Text style={styles.colorTagText}>{c}</Text>
+                  </View>
                 ))}
               </View>
-            </View>
-          ) : null}
-
-          {item?.gender !== undefined ? (
-            <View style={styles.detailRow}>
-              <Text variant="bodyLarge" style={styles.detailLabel}>
-                Gender:
-              </Text>
-              <Text variant="bodyLarge" style={styles.detailValue}>
-                {item.gender === true ? "Nữ" : "Nam"}
-              </Text>
             </View>
           ) : null}
 
           {item?.description ? (
             <>
               <Text
-                variant="bodyLarge"
-                style={[styles.detailLabel, { marginTop: 12, marginBottom: 8 }]}
+                style={[
+                  styles.detailLabel,
+                  { marginTop: Spacing.md, marginBottom: Spacing.sm },
+                ]}
               >
-                Description:
+                Description
               </Text>
-              <Text variant="bodyMedium" style={styles.description}>
-                {String(item.description)}
-              </Text>
+              <Text style={styles.description}>{String(item.description)}</Text>
             </>
           ) : null}
         </Surface>
 
-        {/* Reviews Section */}
-        <Surface style={styles.reviewsCard} elevation={1}>
-          <Text variant="titleLarge" style={styles.sectionTitle}>
-            Customer Reviews
-          </Text>
+        {/* ─ Reviews card ───────────────────────────────────────── */}
+        <Surface style={styles.reviewsCard} elevation={0}>
+          <Text style={styles.sectionTitle}>Reviews</Text>
           <Divider style={styles.divider} />
 
-          {/* Average Rating */}
+          {/* Rating overview */}
           <View style={styles.ratingOverview}>
             <View style={styles.avgRatingBox}>
-              <Text variant="displaySmall" style={styles.avgRatingNumber}>
-                {feedback.avg.toFixed(1)}
+              <Text style={styles.avgRatingNumber}>
+                {reviewStats.avg.toFixed(1)}
               </Text>
-              <Stars value={feedback.avg} size={24} />
-              <Text variant="bodyMedium" style={styles.totalReviews}>
-                {feedback.total} {feedback.total === 1 ? "review" : "reviews"}
+              <Stars value={reviewStats.avg} size={22} />
+              <Text style={styles.totalReviews}>
+                {reviewStats.total}{" "}
+                {reviewStats.total === 1 ? "review" : "reviews"}
               </Text>
             </View>
-
-            {/* Rating Breakdown */}
             <View style={styles.ratingBreakdown}>
               {[5, 4, 3, 2, 1].map((v) => {
-                const count = feedback.groups.get(v)?.length || 0;
-                const percentage =
+                const count = reviewStats.groups.get(v)?.length || 0;
+                const pct =
                   feedback.total === 0 ? 0 : (count / feedback.total) * 100;
                 return (
                   <View key={v} style={styles.ratingRow}>
-                    <Text variant="bodyMedium" style={styles.starLabel}>
-                      {v}★
-                    </Text>
+                    <Text style={styles.starLabel}>{v}★</Text>
                     <View style={styles.progressBar}>
                       <View
-                        style={[
-                          styles.progressFill,
-                          { width: `${percentage}%` },
-                        ]}
+                        style={[styles.progressFill, { width: `${pct}%` }]}
                       />
                     </View>
-                    <Text variant="bodySmall" style={styles.countLabel}>
-                      {count}
-                    </Text>
+                    <Text style={styles.countLabel}>{count}</Text>
                   </View>
                 );
               })}
             </View>
           </View>
 
-          {/* Filter Chips */}
+          {/* Filter chips */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterContainer}
+            contentContainerStyle={styles.filterRow}
           >
             {[
-              { label: "Tất cả", value: "all" },
-              { label: "Tiêu cực (≤2⭐)", value: "negative" },
-              { label: "1⭐", value: "1" },
-              { label: "2⭐", value: "2" },
-            ].map((filter) => {
-              const active = filterMode === filter.value;
-              return (
-                <Chip
-                  key={filter.value}
-                  selected={active}
-                  onPress={() => setFilterMode(filter.value)}
-                  mode={active ? "flat" : "outlined"}
-                  style={[styles.filterChip, active && styles.filterChipActive]}
-                  textStyle={{
-                    fontWeight: active ? "bold" : "normal",
-                    color: active ? "#FFFFFF" : "#424242",
-                  }}
-                >
-                  {filter.label}
-                </Chip>
-              );
-            })}
+              { label: "All", value: "all" },
+              { label: "Critical (≤2★)", value: "negative" },
+              { label: "1★", value: "1" },
+              { label: "2★", value: "2" },
+            ].map((f) => (
+              <FilterChip
+                key={f.value}
+                label={f.label}
+                active={filterMode === f.value}
+                onPress={() => setFilterMode(f.value)}
+              />
+            ))}
           </ScrollView>
 
-          {/* Comments */}
+          {/* Review list */}
           <View style={styles.commentsContainer}>
-            {visibleComments.length === 0 ? (
-              <Surface style={styles.emptyState} elevation={0}>
-                <Text variant="bodyLarge" style={styles.emptyText}>
-                  {filterMode === "all"
-                    ? "No reviews yet"
-                    : "No reviews match this filter"}
+            {visibleReviews.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>
+                  No reviews match this filter
                 </Text>
-              </Surface>
+              </View>
             ) : (
-              visibleComments.map((f, idx) => (
-                <Card key={idx} style={styles.commentCard} elevation={1}>
-                  <Card.Content>
-                    <Stars value={f.rating} size={18} />
-                    <Text variant="bodyMedium" style={styles.commentText}>
-                      {f.comment}
-                    </Text>
-                  </Card.Content>
-                </Card>
-              ))
+              visibleReviews.map((r) => <ReviewItem key={r.id} review={r} />)
             )}
           </View>
+
+          {/* Write a Review CTA */}
+          <Pressable
+            onPress={() => {
+              /* TODO: implement review form */
+            }}
+            style={({ pressed }) => [
+              styles.writeReviewBtn,
+              pressed && { opacity: 0.8 },
+            ]}
+          >
+            <Text style={styles.writeReviewText}>✦ Write a Review</Text>
+          </Pressable>
         </Surface>
-      </ScrollView>
-    </SafeAreaView>
+
+        {/* Bottom spacer so content is not hidden behind sticky bar */}
+        <View style={{ height: 96 + insets.bottom }} />
+      </Animated.ScrollView>
+
+      {/* ─ DetailTopBar — absolute luxury overlay ─────────────────── */}
+      <Animated.View
+        style={[
+          styles.topBar,
+          { paddingTop: insets.top, backgroundColor: topBarBg },
+        ]}
+        pointerEvents="box-none"
+      >
+        <Animated.View
+          style={[styles.topBarDivider, { opacity: topBarBorderOpacity }]}
+        />
+        <View style={styles.topBarInner}>
+          {/* Back */}
+          <Pressable
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={({ pressed }) => [
+              styles.topBarBtn,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <ChevronLeft size={22} color={Colors.textPrimary} />
+          </Pressable>
+
+          {/* Center title — fades in after scrolling past image */}
+          <Animated.Text
+            style={[styles.topBarTitle, { opacity: titleOpacity }]}
+          >
+            Product Details
+          </Animated.Text>
+
+          {/* Right cluster: heart + quick-nav */}
+          <View style={styles.topBarRight}>
+            <Pressable
+              onPress={() => {
+                if (!id) return;
+                if (favorite) fav.removeFavorite(id);
+                else fav.addFavorite(id);
+              }}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              style={({ pressed }) => [
+                styles.topBarBtn,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Heart
+                size={20}
+                color={favorite ? Colors.wishlist : Colors.textPrimary}
+                fill={favorite ? Colors.wishlist : "transparent"}
+              />
+            </Pressable>
+            <Pressable
+              onPress={() => setNavSheetVisible(true)}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 12 }}
+              style={({ pressed }) => [
+                styles.topBarBtn,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <LayoutGrid size={20} color={Colors.textPrimary} />
+            </Pressable>
+          </View>
+        </View>
+      </Animated.View>
+
+      {/* ─ Sticky bottom CTA ──────────────────────────────────────── */}
+      <BottomCTABar
+        price={getCostNumber(item)}
+        percentOff={item?.percentOff ? formatPercentOff(item.percentOff) : null}
+        onAddToBag={() => {
+          // TODO: wire to cart / bag context
+        }}
+      />
+
+      {/* ─ Quick navigation sheet ─────────────────────────────────── */}
+      <QuickNavSheet
+        visible={navSheetVisible}
+        onClose={() => setNavSheetVisible(false)}
+        navigation={navigation}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#F5F5F5",
-  },
-  navBar: {
-    flexDirection: "row",
-    justifyContent: "flex-start",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: "#FFFFFF",
-    gap: 8,
-  },
-  navButton: {
-    margin: 0,
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
-  },
+  // Root wrapper (holds SafeArea + sticky bar)
+  root: { flex: 1, backgroundColor: Colors.background },
+  screen: { flex: 1 },
+  content: { paddingBottom: Spacing.base },
+
+  // ─ Image hero ──────────────────────────────────────────────────
   imageContainer: {
     width: "100%",
-    height: 384,
-    backgroundColor: "#FAFAFA",
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-    borderRadius: 16,
-    marginBottom: 16,
+    aspectRatio: 3 / 4,
+    backgroundColor: Colors.imagePlaceholder,
+    marginBottom: Spacing.base,
   },
-  productImage: {
-    width: "100%",
-    height: "100%",
-  },
+  productImage: { width: "100%", height: "100%" },
   noImagePlaceholder: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#F5F5F5",
-    justifyContent: "center",
+    flex: 1,
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.surfaceSubtle,
   },
   noImageText: {
-    color: "#9CA3AF",
+    fontSize: Typography.fontSizeMD,
+    color: Colors.textDisabled,
   },
+  // ─ DetailTopBar ──────────────────────────────────────────────────────────
+  topBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  topBarDivider: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(31,31,31,0.14)",
+  },
+  topBarInner: {
+    height: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.base,
+    gap: Spacing.sm,
+  },
+  topBarTitle: {
+    flex: 1,
+    textAlign: "center",
+    fontSize: Typography.fontSizeSM,
+    fontWeight: Typography.fontWeightSemiBold,
+    color: Colors.textPrimary,
+    letterSpacing: 0.6,
+  },
+  topBarBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: Radius.full,
+    backgroundColor: "rgba(254,250,224,0.85)",
+    borderWidth: 1,
+    borderColor: "rgba(31,31,31,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  topBarRight: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+  },
+
+  // ─ Header card (below image, no elevation) ─────────────────────
   headerCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    paddingHorizontal: Spacing.base,
+    paddingBottom: Spacing.base,
+    gap: Spacing.sm,
   },
-  headerTop: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 16,
+  brandEyebrow: {
+    fontSize: Typography.fontSizeXS,
+    fontWeight: Typography.fontWeightMedium,
+    color: Colors.textSecondary,
+    letterSpacing: Typography.letterSpacingWidest,
   },
-  title: {
-    fontWeight: "bold",
-    color: "#1A1A1A",
-    marginBottom: 8,
+  productName: {
+    fontSize: Typography.fontSizeXXL,
+    fontWeight: Typography.fontWeightBold,
+    color: Colors.textPrimary,
+    lineHeight: Typography.lineHeightTitle,
+    letterSpacing: Typography.letterSpacingTight,
   },
-  brand: {
-    color: "#FF6B6B",
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  categoryChip: {
-    alignSelf: "flex-start",
-    marginTop: 4,
-    backgroundColor: "#FFF3E0",
-    borderColor: "#FFB74D",
-  },
-  categoryChipText: {
-    color: "#F57C00",
-    fontWeight: "600",
-  },
-  iconGroup: {
+  metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: Spacing.sm,
+    flexWrap: "wrap",
   },
-  navIconButton: {
-    margin: 0,
+  categoryTag: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 4,
+    borderRadius: Radius.chip,
+    backgroundColor: Colors.accentLight,
+    borderWidth: 1,
+    borderColor: Colors.accent,
   },
-  favIconButton: {
-    elevation: 4,
+  categoryTagText: {
+    fontSize: Typography.fontSizeSM,
+    fontWeight: Typography.fontWeightSemiBold,
+    color: Colors.accent,
+    letterSpacing: Typography.letterSpacingWide,
   },
-  priceSection: {
+  ratingPill: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 4,
   },
-  price: {
-    fontWeight: "bold",
-    color: "#FF6B6B",
+  ratingCount: {
+    fontSize: Typography.fontSizeXS,
+    color: Colors.textSecondary,
   },
-  discountBadge: {
-    backgroundColor: "#D32F2F",
-  },
+
+  // ─ Details card ────────────────────────────────────────────────
   detailsCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    marginHorizontal: Spacing.base,
+    marginBottom: Spacing.md,
+    padding: Spacing.base,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   sectionTitle: {
-    fontWeight: "bold",
-    color: "#1A1A1A",
-    marginBottom: 8,
+    fontSize: Typography.fontSizeXS,
+    fontWeight: Typography.fontWeightMedium,
+    color: Colors.textSecondary,
+    letterSpacing: Typography.letterSpacingWidest,
+    textTransform: "uppercase",
+    marginBottom: Spacing.sm,
   },
   divider: {
-    marginVertical: 12,
-    backgroundColor: "#E5E7EB",
+    marginVertical: Spacing.md,
+    backgroundColor: Colors.divider,
   },
   detailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
   },
   detailLabel: {
-    fontWeight: "600",
-    color: "#424242",
+    fontSize: Typography.fontSizeSM,
+    fontWeight: Typography.fontWeightSemiBold,
+    color: Colors.textSecondary,
     flex: 1,
   },
   detailValue: {
-    color: "#1A1A1A",
+    fontSize: Typography.fontSizeMD,
+    color: Colors.textPrimary,
     flex: 2,
     textAlign: "right",
   },
-  colorContainer: {
+  colorRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 6,
     flex: 2,
     justifyContent: "flex-end",
   },
-  colorChip: {
-    height: 32,
-    backgroundColor: "#F5F5F5",
+  colorTag: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: Radius.chip,
+    backgroundColor: Colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  colorTagText: {
+    fontSize: Typography.fontSizeXS,
+    color: Colors.textOnSurface,
+    fontWeight: Typography.fontWeightMedium,
   },
   description: {
-    color: "#424242",
-    lineHeight: 22,
+    fontSize: Typography.fontSizeMD,
+    color: Colors.textSecondary,
+    lineHeight: Typography.lineHeightBody,
   },
+
+  // ─ Reviews card ────────────────────────────────────────────────
   reviewsCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    marginHorizontal: Spacing.base,
+    marginBottom: Spacing.md,
+    padding: Spacing.base,
+    backgroundColor: Colors.card,
+    borderRadius: Radius.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   ratingOverview: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 20,
+    marginBottom: Spacing.lg,
   },
   avgRatingBox: {
     alignItems: "center",
@@ -482,76 +590,85 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   avgRatingNumber: {
-    fontWeight: "bold",
-    color: "#FF6B6B",
-    marginBottom: 8,
+    fontSize: Typography.fontSizeDisplay,
+    fontWeight: Typography.fontWeightBold,
+    color: Colors.accent,
+    letterSpacing: Typography.letterSpacingTight,
+    marginBottom: Spacing.xs,
   },
   totalReviews: {
-    color: "#757575",
-    marginTop: 8,
+    fontSize: Typography.fontSizeXS,
+    color: Colors.textSecondary,
+    marginTop: Spacing.xs,
+    letterSpacing: Typography.letterSpacingWide,
   },
-  ratingBreakdown: {
-    flex: 2,
-    gap: 8,
-  },
-  ratingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
+  ratingBreakdown: { flex: 2, gap: 6 },
+  ratingRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
   starLabel: {
-    width: 30,
-    color: "#424242",
-    fontWeight: "600",
+    width: 28,
+    fontSize: Typography.fontSizeSM,
+    color: Colors.textSecondary,
+    fontWeight: Typography.fontWeightMedium,
   },
   progressBar: {
     flex: 1,
-    height: 8,
-    backgroundColor: "#E5E7EB",
-    borderRadius: 4,
+    height: 6,
+    backgroundColor: Colors.surfaceSubtle,
+    borderRadius: Radius.full,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#FF6B6B",
-    borderRadius: 4,
+    backgroundColor: Colors.accent,
+    borderRadius: Radius.full,
   },
   countLabel: {
-    width: 30,
+    width: 24,
     textAlign: "right",
-    color: "#757575",
+    fontSize: Typography.fontSizeXS,
+    color: Colors.textSecondary,
   },
-  filterContainer: {
-    gap: 8,
-    paddingVertical: 12,
-  },
-  filterChip: {
-    backgroundColor: "#FFFFFF",
-  },
-  filterChipActive: {
-    backgroundColor: "#FF6B6B",
-  },
-  commentsContainer: {
-    marginTop: 12,
-    gap: 12,
-  },
+
+  filterRow: { gap: Spacing.sm, paddingVertical: Spacing.md },
+
+  commentsContainer: { marginTop: Spacing.sm, gap: Spacing.md },
   commentCard: {
-    backgroundColor: "#FAFAFA",
-    borderRadius: 12,
+    padding: Spacing.md,
+    backgroundColor: Colors.background,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: Spacing.sm,
   },
   commentText: {
-    marginTop: 8,
-    color: "#424242",
-    lineHeight: 20,
+    fontSize: Typography.fontSizeMD,
+    color: Colors.textSecondary,
+    lineHeight: Typography.lineHeightBody,
   },
   emptyState: {
-    padding: 24,
+    paddingVertical: Spacing.xl,
     alignItems: "center",
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
   },
   emptyText: {
-    color: "#9CA3AF",
+    fontSize: Typography.fontSizeMD,
+    color: Colors.textDisabled,
+  },
+
+  // ─ Write a Review CTA ─────────────────────────────────────────
+  writeReviewBtn: {
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.input,
+    backgroundColor: Colors.accentLight,
+    borderWidth: 1,
+    borderColor: Colors.accent,
+    alignItems: "center",
+  },
+  writeReviewText: {
+    fontSize: Typography.fontSizeMD,
+    fontWeight: Typography.fontWeightSemiBold,
+    color: Colors.accent,
+    letterSpacing: Typography.letterSpacingWide,
   },
 });
 

@@ -4,27 +4,15 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { StatusBar } from "expo-status-bar";
-import { PaperProvider, MD3LightTheme } from "react-native-paper";
-import { Home, Heart } from "lucide-react-native";
+import { PaperProvider } from "react-native-paper";
+import { Home, Heart, MapPin } from "lucide-react-native";
 
 import FavoritesProvider from "./context/FavoritesProvider";
 import HomeScreen from "./screens/HomeScreen";
 import FavoritesScreen from "./screens/FavoritesScreen";
 import DetailScreen from "./screens/DetailScreen";
-
-const theme = {
-  ...MD3LightTheme,
-  colors: {
-    ...MD3LightTheme.colors,
-    primary: "#FF6B6B",
-    primaryContainer: "#FFE8E8",
-    secondary: "#4ECDC4",
-    secondaryContainer: "#C7F0ED",
-    error: "#D32F2F",
-    background: "#F5F5F5",
-    surface: "#FFFFFF",
-  },
-};
+import LocationScreen from "./screens/LocationScreen";
+import { PaperTheme, Colors } from "./theme";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -34,16 +22,17 @@ function Tabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#FF6B6B",
-        tabBarInactiveTintColor: "#757575",
+        tabBarActiveTintColor: Colors.accent,
+        tabBarInactiveTintColor: Colors.textSecondary,
         tabBarStyle: {
-          backgroundColor: "#FFFFFF",
-          borderTopWidth: 0,
-          elevation: 8,
-          shadowColor: "#000",
+          backgroundColor: Colors.background,
+          borderTopWidth: 1,
+          borderTopColor: Colors.border,
+          elevation: 4,
+          shadowColor: Colors.overlay,
           shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
+          shadowOpacity: 0.06,
+          shadowRadius: 6,
           height: 60,
           paddingBottom: 8,
           paddingTop: 8,
@@ -76,13 +65,27 @@ function Tabs() {
           ),
         }}
       />
+      <Tab.Screen
+        name="Stores"
+        component={LocationScreen}
+        options={{
+          tabBarLabel: "Stores",
+          tabBarIcon: ({ color, focused }) => (
+            <MapPin
+              size={focused ? 26 : 24}
+              color={color}
+              fill={focused ? color : "none"}
+            />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
 }
 
 export default function App() {
   return (
-    <PaperProvider theme={theme}>
+    <PaperProvider theme={PaperTheme}>
       <SafeAreaProvider>
         <FavoritesProvider>
           <NavigationContainer>
@@ -95,16 +98,7 @@ export default function App() {
               <Stack.Screen
                 name="Detail"
                 component={DetailScreen}
-                options={{
-                  title: "Product Details",
-                  headerStyle: {
-                    backgroundColor: "#FF6B6B",
-                  },
-                  headerTintColor: "#FFFFFF",
-                  headerTitleStyle: {
-                    fontWeight: "bold",
-                  },
-                }}
+                options={{ headerShown: false }}
               />
             </Stack.Navigator>
             <StatusBar style="auto" />
