@@ -67,6 +67,15 @@ function FavoritesScreen({ navigation }) {
   useFocusEffect(
     useCallback(() => {
       loadAll();
+      // Cleanup runs when the screen blurs (user switches tabs / navigates away)
+      return () => {
+        setMultiSelect(false);
+        setSelectedIds(new Set());
+        setBulkSheet(false);
+        setSnackVisible(false);
+        // Snap all open swipe rows back to resting position
+        swipeRefs.current.forEach((r) => r?.close?.());
+      };
     }, [loadAll]),
   );
 

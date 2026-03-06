@@ -98,10 +98,17 @@ function DetailScreen({ route, navigation }) {
     return { total, avg, groups };
   }, [feedback]);
 
+  // countsByRating: { 5: n, 4: n, 3: n, 2: n, 1: n }
+  const countsByRating = useMemo(() => {
+    const map = {};
+    for (let i = 1; i <= 5; i++) {
+      map[i] = reviewStats.groups.get(i)?.length || 0;
+    }
+    return map;
+  }, [reviewStats.groups]);
+
   const visibleReviews = useMemo(() => {
     if (filterMode === "all") return displayReviews;
-    if (filterMode === "negative")
-      return displayReviews.filter((r) => r.rating <= 2);
     return displayReviews.filter((r) => r.rating === Number(filterMode));
   }, [displayReviews, filterMode]);
 
@@ -248,17 +255,19 @@ function DetailScreen({ route, navigation }) {
             </View>
           </View>
 
-          {/* Filter chips */}
+          {/* Rating filter chips — All / 5★ / 4★ / 3★ / 2★ / 1★ */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filterRow}
           >
             {[
-              { label: "All", value: "all" },
-              { label: "Critical (≤2★)", value: "negative" },
-              { label: "1★", value: "1" },
-              { label: "2★", value: "2" },
+              { label: `All (${reviewStats.total})`, value: "all" },
+              { label: `5★ (${countsByRating[5]})`, value: "5" },
+              { label: `4★ (${countsByRating[4]})`, value: "4" },
+              { label: `3★ (${countsByRating[3]})`, value: "3" },
+              { label: `2★ (${countsByRating[2]})`, value: "2" },
+              { label: `1★ (${countsByRating[1]})`, value: "1" },
             ].map((f) => (
               <FilterChip
                 key={f.value}
@@ -273,9 +282,7 @@ function DetailScreen({ route, navigation }) {
           <View style={styles.commentsContainer}>
             {visibleReviews.length === 0 ? (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>
-                  No reviews match this filter
-                </Text>
+                <Text style={styles.emptyText}>No reviews yet</Text>
               </View>
             ) : (
               visibleReviews.map((r) => <ReviewItem key={r.id} review={r} />)
